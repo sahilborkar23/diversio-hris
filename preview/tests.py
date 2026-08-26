@@ -35,3 +35,28 @@ class HRISAnalyzerTests(SimpleTestCase):
         self.assertEqual(len(analyzer.accepted_employees), 4)
         self.assertSetEqual(analyzer.cycle_members, {"1", "2", "3"})
         self.assertNotIn("4", analyzer.cycle_members)
+
+    def test_manager_error_source_row_number(self):
+        csv_data = (
+            "employee_id,employee_name,email,manager_id\n" # Line 1
+            "1,Alice,alice@div.com,\n"                   # Line 2
+            "2,Bob,bob@div.com,999\n"                    # Line 3
+        )
+        analyzer = HRISAnalyzer(io.StringIO(csv_data))
+        analyzer.analyze()
+        
+        # Proves we get "Row 3" instead of "Row for 2"
+        self.assertTrue(any("Row 3: Manager ID '999' not found." in err for err in analyzer.errors))
+
+    def test_blank_lines_preserve_row_numbers(self):
+        csv_data = (
+            "employee_id,employee_name,email,manager_id,manager_email\n" # Line 1
+            "1,Alice,alice@x.com,,\n"                                    # Line 2
+            "\n"                                                         # Line 3 (Blank)
+            "2,Bob,,,\n"                                                 # Line 4 (Missing email)
+        )
+        analyzer = HRISAnalyzer(io.StringIO(csv_data))
+        analyzer.analyze()
+        
+        # Proves that despite line 3 being blank, Bob is correctly identified on Line 4
+        self.assertTrue(any("Row 4: Missing required employee_id or email." in err for err in analyzer.errors))

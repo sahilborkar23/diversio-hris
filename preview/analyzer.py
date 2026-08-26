@@ -16,7 +16,9 @@ class HRISAnalyzer:
         raw_rows = []
         
         # 1. Parsing and Normalization
-        for row_num, row in enumerate(reader, start=2): # Start at 2 to account for header
+        # [FIX 2] Use reader.line_num instead of enumerate to account for skipped blank lines
+        for row in reader:
+            row_num = reader.line_num
             self.total_rows += 1
             normalized = {}
             for key, value in row.items():
@@ -58,6 +60,8 @@ class HRISAnalyzer:
             row['email'] = email
             row['manager_email'] = row.get('manager_email', '').lower()
             
+            # [FIX 1] Store the original source row number before saving to valid_employees
+            row['_source_row_num'] = row_num 
             valid_employees[emp_id] = row
             email_to_id[email] = emp_id
 
@@ -65,6 +69,8 @@ class HRISAnalyzer:
 
         # 4. Manager Resolution & Hierarchy Build
         for emp_id, row in valid_employees.items():
+            # [FIX 1] Retrieve the source row number
+            source_row_num = row['_source_row_num'] 
             mgr_id_raw = row.get('manager_id', '')
             mgr_email_raw = row.get('manager_email', '')
             
@@ -81,28 +87,28 @@ class HRISAnalyzer:
             # Resolve according to assignment rules
             if mgr_id_raw and mgr_email_raw:
                 if not resolved_by_id or not resolved_by_email:
-                    self.errors.append(f"Row for {emp_id}: Manager not found.")
+                    self.errors.append(f"Row {source_row_num}: Manager not found.")
                     has_error = True
                 elif resolved_by_id != resolved_by_email:
-                    self.errors.append(f"Row for {emp_id}: Conflicting manager references.")
+                    self.errors.append(f"Row {source_row_num}: Conflicting manager references.")
                     has_error = True
                 else:
                     final_mgr_id = resolved_by_id
             elif mgr_id_raw:
                 if not resolved_by_id:
-                    self.errors.append(f"Row for {emp_id}: Manager ID '{mgr_id_raw}' not found.")
+                    self.errors.append(f"Row {source_row_num}: Manager ID '{mgr_id_raw}' not found.")
                     has_error = True
                 else:
                     final_mgr_id = resolved_by_id
             elif mgr_email_raw:
                 if not resolved_by_email:
-                    self.errors.append(f"Row for {emp_id}: Manager email '{mgr_email_raw}' not found.")
+                    self.errors.append(f"Row {source_row_num}: Manager email '{mgr_email_raw}' not found.")
                     has_error = True
                 else:
                     final_mgr_id = resolved_by_email
 
             if final_mgr_id == emp_id:
-                self.errors.append(f"Row for {emp_id}: Employee cannot manage themselves.")
+                self.errors.append(f"Row {source_row_num}: Employee cannot manage themselves.")
                 has_error = True
                 final_mgr_id = None
 
