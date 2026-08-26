@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>HRIS Import Preview</title>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.5; padding: 2rem; max-width: 900px; margin: 0 auto; color: #333; }
+        h1, h2 { color: #111; }
+        .upload-card { border: 2px dashed #ccc; padding: 2rem; text-align: center; border-radius: 8px; margin-bottom: 2rem; }
+        .summary { display: flex; gap: 2rem; margin-bottom: 2rem; background: #f8f9fa; padding: 1rem; border-radius: 8px; }
+        .error-list { color: #d32f2f; background: #ffebee; padding: 1rem; border-radius: 8px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 2rem; }
+        th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #f8f9fa; }
+    </style>
+</head>
+<body>
+    <h1>HRIS Import Preview</h1>
+    
+    <div class="upload-card">
+        <form method="POST" enctype="multipart/form-data">
+            {% csrf_token %}
+            <input type="file" name="csv_file" accept=".csv" required>
+            <button type="submit">Preview Upload</button>
+        </form>
+    </div>
+
+    {% if fatal_error %}
+        <div class="error-list"><strong>Error:</strong> {{ fatal_error }}</div>
+    {% endif %}
+
+    {% if analyzed %}
+        <div class="summary">
+            <div><strong>Total Source Rows:</strong> {{ total_rows }}</div>
+            <div><strong>Accepted Employees:</strong> {{ accepted_count }}</div>
+        </div>
+
+        {% if errors %}
+            <div class="error-list">
+                <h3>Validation Errors ({{ errors|length }})</h3>
+                <ul>
+                    {% for error in errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+
+        <h2>Root Employees ({{ roots|length }})</h2>
+        <table>
+            <tr><th>Name</th><th>Email</th></tr>
+            {% for root in roots %}
+                <tr><td>{{ root.employee_name }}</td><td>{{ root.email }}</td></tr>
+            {% empty %}
+                <tr><td colspan="2">No root employees found.</td></tr>
+            {% endfor %}
+        </table>
+
+        <h2>Managers ({{ managers|length }})</h2>
+        <table>
+            <tr><th>Name</th><th>Email</th><th>Direct Reports</th></tr>
+            {% for mgr in managers %}
+                <tr><td>{{ mgr.employee_name }}</td><td>{{ mgr.email }}</td><td>{{ mgr.report_count }}</td></tr>
+            {% empty %}
+                <tr><td colspan="3">No managers found.</td></tr>
+            {% endfor %}
+        </table>
+
+        <h2>Reporting Cycle Members ({{ cycles|length }})</h2>
+        <table>
+            <tr><th>Name</th><th>Email</th></tr>
+            {% for cycle in cycles %}
+                <tr><td style="color: #d32f2f">{{ cycle.employee_name }}</td><td>{{ cycle.email }}</td></tr>
+            {% empty %}
+                <tr><td colspan="2">No cycles detected. Excellent!</td></tr>
+            {% endfor %}
+        </table>
+    {% endif %}
+</body>
+</html>
