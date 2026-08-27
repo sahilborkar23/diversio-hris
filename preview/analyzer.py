@@ -15,28 +15,37 @@ class HRISAnalyzer:
         reader = csv.DictReader(self.file_stream)
         raw_rows = []
         
-        # 1. Parsing and Normalization
-        # [FIX 2] Use reader.line_num instead of enumerate to account for skipped blank lines
+        # Parsing and Normalization
         for row in reader:
             row_num = reader.line_num
             self.total_rows += 1
+            
+            # DictReader uses None as a key for extra columns, and None as a value for missing columns.
+            if None in row or None in row.values():
+                self.errors.append(f"Row {row_num}: Malformed CSV row (field count does not match header).")
+                continue
+                
             normalized = {}
             for key, value in row.items():
                 if key:
                     normalized[key.strip()] = value.strip() if value else ''
             raw_rows.append((row_num, normalized))
 
-        # 2. Duplicate Detection Prep
+        # Duplicate Detection Prep
         id_counts = defaultdict(int)
         email_counts = defaultdict(int)
         
         for _, row in raw_rows:
             emp_id = row.get('employee_id', '')
             email = row.get('email', '').lower()
-            if emp_id: id_counts[emp_id] += 1
-            if email: email_counts[email] += 1
+            
+            # Only count duplicates if the row has valid identity fields
+            if emp_id and email:
+                id_counts[emp_id] += 1
+                email_counts[email] += 1
 
-        # 3. Identity Validation
+
+        # Identity Validation
         valid_employees = {}
         email_to_id = {}
         
@@ -60,16 +69,16 @@ class HRISAnalyzer:
             row['email'] = email
             row['manager_email'] = row.get('manager_email', '').lower()
             
-            # [FIX 1] Store the original source row number before saving to valid_employees
+            # Store the original source row number before saving to valid_employees
             row['_source_row_num'] = row_num 
             valid_employees[emp_id] = row
             email_to_id[email] = emp_id
 
         self.accepted_employees = valid_employees
 
-        # 4. Manager Resolution & Hierarchy Build
+        # Manager Resolution & Hierarchy Build
         for emp_id, row in valid_employees.items():
-            # [FIX 1] Retrieve the source row number
+            # Retrieve the source row number
             source_row_num = row['_source_row_num'] 
             mgr_id_raw = row.get('manager_id', '')
             mgr_email_raw = row.get('manager_email', '')
@@ -117,7 +126,7 @@ class HRISAnalyzer:
                 self.manager_relationships[final_mgr_id].append(emp_id)
                 row['_resolved_manager_id'] = final_mgr_id # Store for graph traversal
 
-        # 5. Cycle Detection
+        # Cycle Detection
         self._detect_cycles(valid_employees)
 
     def _detect_cycles(self, valid_employees):

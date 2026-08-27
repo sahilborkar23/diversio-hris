@@ -38,14 +38,13 @@ class HRISAnalyzerTests(SimpleTestCase):
 
     def test_manager_error_source_row_number(self):
         csv_data = (
-            "employee_id,employee_name,email,manager_id\n" # Line 1
-            "1,Alice,alice@div.com,\n"                   # Line 2
-            "2,Bob,bob@div.com,999\n"                    # Line 3
+            "employee_id,employee_name,email,manager_id\n" 
+            "1,Alice,alice@div.com,\n"                   
+            "2,Bob,bob@div.com,999\n"                    
         )
         analyzer = HRISAnalyzer(io.StringIO(csv_data))
         analyzer.analyze()
         
-        # Proves we get "Row 3" instead of "Row for 2"
         self.assertTrue(any("Row 3: Manager ID '999' not found." in err for err in analyzer.errors))
 
     def test_blank_lines_preserve_row_numbers(self):
@@ -60,3 +59,49 @@ class HRISAnalyzerTests(SimpleTestCase):
         
         # Proves that despite line 3 being blank, Bob is correctly identified on Line 4
         self.assertTrue(any("Row 4: Missing required employee_id or email." in err for err in analyzer.errors))
+
+
+    def test_incomplete_row_does_not_poison_valid_id(self):
+        csv_data = (
+            "employee_id,employee_name,email,manager_id,manager_email\n"
+            "1,Alice,alice@x.com,,\n"
+            "1,,,,\n" 
+        )
+        analyzer = HRISAnalyzer(io.StringIO(csv_data))
+        analyzer.analyze()
+        self.assertIn("1", analyzer.accepted_employees)
+        self.assertTrue(any("Row 3: Missing required employee_id or email." in err for err in analyzer.errors))
+        self.assertFalse(any("Duplicate employee_id" in err for err in analyzer.errors))
+
+    def test_incomplete_row_does_not_poison_valid_email(self):
+        csv_data = (
+            "employee_id,employee_name,email,manager_id,manager_email\n"
+            "1,Alice,alice@x.com,,\n"
+            ",,alice@x.com,,\n" 
+        )
+        analyzer = HRISAnalyzer(io.StringIO(csv_data))
+        analyzer.analyze()
+        self.assertIn("1", analyzer.accepted_employees)
+        self.assertTrue(any("Row 3: Missing required employee_id or email." in err for err in analyzer.errors))
+        self.assertFalse(any("Duplicate email" in err for err in analyzer.errors))
+
+    def test_malformed_extra_column_rejected(self):
+        csv_data = (
+            "employee_id,employee_name,email,manager_id,manager_email\n"
+            "1,Smith, Jane,smith@x.com,,\n" 
+        )
+        analyzer = HRISAnalyzer(io.StringIO(csv_data))
+        analyzer.analyze()
+        self.assertNotIn("1", analyzer.accepted_employees)
+        self.assertTrue(any("Row 2: Malformed CSV row" in err for err in analyzer.errors))
+
+    def test_valid_quoted_comma_accepted(self):
+        csv_data = (
+            "employee_id,employee_name,email,manager_id,manager_email\n"
+            '1,"Smith, Jane",smith@x.com,,\n' 
+        )
+        analyzer = HRISAnalyzer(io.StringIO(csv_data))
+        analyzer.analyze()
+        self.assertIn("1", analyzer.accepted_employees)
+        self.assertEqual(analyzer.accepted_employees["1"]["employee_name"], "Smith, Jane")
+        self.assertFalse(any("Malformed CSV row" in err for err in analyzer.errors))

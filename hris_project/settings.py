@@ -9,7 +9,7 @@ ALLOWED_HOSTS = []
 
 INSTALLED_APPS = [
     'django.contrib.contenttypes',
-    'preview', # Our app
+    'preview', 
 ]
 
 MIDDLEWARE = [
